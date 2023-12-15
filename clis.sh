@@ -78,7 +78,7 @@ jobs:
       run: |
         CARGO_TARGET_DIR=~/instmp cargo install --force --path=\$PWD
 
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: bin-artifact
         path: ~/instmp/release/rustcbuildx
@@ -118,7 +118,7 @@ $(
 )
 
     - name: Retrieve saved bin
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: bin-artifact
     - run: | # TODO: whence https://github.com/actions/download-artifact/issues/236
