@@ -568,7 +568,7 @@ fn bake_rustc(
             let cwd_path = Utf8Path::from_path(cwd.as_path()).expect("PROOF: did not fail earlier");
             ("cwd".to_owned(), cwd_path.to_string())
         }),
-        crate_out.as_deref().map(|crate_out| (crate_out_name(crate_out), crate_out.to_owned())),
+        crate_out.map(|crate_out| (crate_out_name(&crate_out), crate_out)),
     ]
     .into_iter()
     .flatten()
@@ -695,11 +695,12 @@ target "{incremental_stage}" {{
     } else {
         cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     }
-    cmd.arg("buildx")
-        .arg("bake") /*.arg("--no-cache")*/ // TODO
-        .arg("--file")
-        .arg(&bakefile_path)
-        .args(stages);
+    cmd.arg("buildx").arg("bake");
+    if false {
+        cmd.arg("--no-cache");
+    }
+    cmd.arg("--file").arg(&bakefile_path);
+    cmd.args(stages);
     let start = Instant::now();
     let code = cmd
         .output()
