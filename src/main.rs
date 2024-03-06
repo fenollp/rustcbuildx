@@ -14,7 +14,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cli::{envs, exit_code, help, pull};
 use env_logger::{Env, Target};
 use envs::{called_from_build_script, RUSTCBUILDX, RUSTCBUILDX_LOG, RUSTCBUILDX_LOG_STYLE};
-use log::{debug, error, info, warn};
 use mktemp::Temp;
 
 use crate::{
@@ -78,7 +77,7 @@ fn faillible_main(args: VecDeque<String>, vars: BTreeMap<String, String>) -> Res
         [rustc, "--crate-name", crate_name, ..] if !called_from_build_script =>
              bake_rustc(crate_name, argv(1), || call_rustc(rustc, argv(1)))
             .inspect_err(|e| {
-                error!(target:crate_name, "Failure: {e}");
+                log::error!(target:crate_name, "Failure: {e}");
                 eprintln!("Failure: {e}");
             }),
         _ => panic!("RUSTC_WRAPPER={PKG}'s input unexpected:\n\targz = {argz:?}\n\targs = {args:?}\n\tenvs = {vars:?}\n"),
@@ -155,7 +154,7 @@ fn bake_rustc(
     }
 
     let krate = format!("{PKG}:{crate_name}");
-    info!(target:&krate, "{PKG}@{vsn} wraps `rustc` calls to BuildKit builders",
+    log::info!(target:&krate, "{PKG}@{vsn} wraps `rustc` calls to BuildKit builders",
         vsn = env!("CARGO_PKG_VERSION"),
     );
 
@@ -163,7 +162,7 @@ fn bake_rustc(
     let pwd: Utf8PathBuf = pwd.try_into().context("Path's UTF-8 encoding is corrupted")?;
 
     let (st, args) = parse::as_rustc(&pwd, crate_name, arguments, debug.is_some())?;
-    info!(target:&krate, "{st:?}");
+    log::info!(target:&krate, "{st:?}");
     let RustcArgs { crate_type, emit, externs, metadata, incremental, input, out_dir, target_path } =
         st;
 
@@ -172,7 +171,7 @@ fn bake_rustc(
     let full_crate_id = format!("{crate_type}-{crate_name}-{metadata}");
     let krate = full_crate_id.as_str();
 
-    env::vars().for_each(|(k, v)| debug!(target:&krate, "env is set: {k}={v:?}")); // TODO: drop
+    env::vars().for_each(|(k, v)| log::debug!(target:&krate, "env is set: {k}={v:?}")); // TODO: drop
 
     // https://github.com/rust-lang/cargo/issues/12059
     let mut all_externs = BTreeSet::new();
@@ -191,7 +190,7 @@ fn bake_rustc(
     if crate_type == "proc-macro" {
         // This way crates that depend on this know they must require it as .so
         let guard = format!("{crate_externs}_proc-macro");
-        info!(target:&krate, "opening (RW) {guard}");
+        log::info!(target:&krate, "opening (RW) {guard}");
         fs::write(&guard, "").with_context(|| format!("Failed to `touch {guard}`"))?;
     };
 
@@ -216,11 +215,11 @@ fn bake_rustc(
         short_externs.insert(xtern.to_owned());
 
         let xtern_crate_externs = externs_prefix(xtern);
-        info!(target:&krate, "checking (RO) extern's externs {xtern_crate_externs}");
+        log::info!(target:&krate, "checking (RO) extern's externs {xtern_crate_externs}");
         if file_exists_and_is_not_empty(&xtern_crate_externs)
             .with_context(|| format!("Failed to `test -s {crate_externs}`"))?
         {
-            info!(target:&krate, "opening (RO) crate externs {xtern_crate_externs}");
+            log::info!(target:&krate, "opening (RO) crate externs {xtern_crate_externs}");
             let fd = File::open(&xtern_crate_externs)
                 .with_context(|| format!("Failed to `cat {xtern_crate_externs}`"))?;
             for line in BufReader::new(fd).lines() {
@@ -229,7 +228,7 @@ fn bake_rustc(
                 assert_ne!(transitive, "");
 
                 let guard = externs_prefix(&format!("{transitive}_proc-macro"));
-                info!(target:&krate, "checking (RO) extern's guard {guard}");
+                log::info!(target:&krate, "checking (RO) extern's guard {guard}");
                 let actual_extern =
                     if file_exists(&guard).with_context(|| format!("Failed to `stat {guard}`"))? {
                         format!("lib{transitive}.so")
@@ -243,7 +242,7 @@ fn bake_rustc(
 
                 if debug.is_some() {
                     let deps_dir = Utf8Path::new(&target_path).join("deps");
-                    info!(target:&krate, "listing existing an extern crate's extern matches {deps_dir}/lib*.*");
+                    log::info!(target:&krate, "listing existing an extern crate's extern matches {deps_dir}/lib*.*");
                     let listing = read_dir(&deps_dir)
                         .with_context(|| format!("Failed reading directory {deps_dir}"))?
                         // TODO: at least context() error
@@ -257,7 +256,7 @@ fn bake_rustc(
                         .map(|p| p.to_string())
                         .collect::<Vec<_>>();
                     if listing != vec![actual_extern.clone()] {
-                        warn!("instead of [{actual_extern}], listing found {listing:?}");
+                        log::warn!("instead of [{actual_extern}], listing found {listing:?}");
                     }
                     //all_externs.extend(listing.into_iter());
                     // TODO: move to after for loop
@@ -267,7 +266,7 @@ fn bake_rustc(
             }
         }
     }
-    info!(target:&krate, "checking (RO) externs {crate_externs}");
+    log::info!(target:&krate, "checking (RO) externs {crate_externs}");
     if !file_exists_and_is_not_empty(&crate_externs)
         .with_context(|| format!("Failed to `test -s {crate_externs}`"))?
     {
@@ -276,14 +275,14 @@ fn bake_rustc(
             shorts.push_str(short_extern);
             shorts.push('\n');
         }
-        info!(target:&krate, "writing (RW) externs to {crate_externs}");
+        log::info!(target:&krate, "writing (RW) externs to {crate_externs}");
         fs::write(&crate_externs, shorts)
             .with_context(|| format!("Failed creating crate externs {crate_externs}"))?;
     }
     let all_externs = all_externs;
-    info!(target:&krate, "crate_externs: {crate_externs}");
+    log::info!(target:&krate, "crate_externs: {crate_externs}");
     if debug.is_some() {
-        debug!(target:&krate, "{crate_externs} = {data}", data = match read_to_string(&crate_externs) {
+        log::debug!(target:&krate, "{crate_externs} = {data}", data = match read_to_string(&crate_externs) {
             Ok(data) => data,
             Err(e) => e.to_string(),
         });
@@ -342,7 +341,7 @@ fn bake_rustc(
     // internal error: entered unreachable code: Unexpected input file "/home/runner/.cargo/registry/src/index.crates.io-6f17d22bba15001f/cargo-deny-0.14.3/src/cargo-deny/main.rs"
     // note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
     // error: could not compile `cargo-deny` (bin "cargo-deny")
-    info!(target:&krate, "picked {rustc_stage} for {suf:?}", suf=input.iter().rev().take(4).collect::<Vec<_>>());
+    log::info!(target:&krate, "picked {rustc_stage} for {suf:?}", suf=input.iter().rev().take(4).collect::<Vec<_>>());
     assert!(!matches!(input_mount, Some((_,ref x)) if x.ends_with("/.cargo/registry")));
 
     let incremental_stage = format!("incremental-{metadata}");
@@ -353,7 +352,7 @@ fn bake_rustc(
     //     .map(|(_imn, imt)| -> Result<Option<String>> {
     //         let check = |file_name| -> Result<bool> {
     //             let p = Utf8Path::new(imt).join(file_name);
-    //             info!(target:&krate, "checking (RO) toolchain file {p}");
+    //             log::info!(target:&krate, "checking (RO) toolchain file {p}");
     //             file_exists_and_is_not_empty(&p)
     //                 .with_context(|| format!("Failed to `test -s {p:?}`"))
     //         };
@@ -442,7 +441,7 @@ fn bake_rustc(
         // TODO: use tmpfs when on *NIX
         // TODO: cache these folders
         if pwd.join(".git").is_dir() {
-            info!(target:&krate, "copying all git files under {}", pwd.join(".git"));
+            log::info!(target:&krate, "copying all git files under {}", pwd.join(".git"));
             let output = Command::new("git")
                 .arg("ls-files")
                 .arg(&pwd)
@@ -454,11 +453,11 @@ fn bake_rustc(
             // TODO: buffer reads to this command's output
             // NOTE: unsorted output lines
             for f in String::from_utf8(output.stdout).context("Parsing `git ls-files`")?.lines() {
-                info!(target:&krate, "copying git repo file {f}");
+                log::info!(target:&krate, "copying git repo file {f}");
                 copy_file(Utf8Path::new(f), cwd_path)?;
             }
         } else {
-            info!(target:&krate, "copying all files under {pwd}");
+            log::info!(target:&krate, "copying all files under {pwd}");
             copy_files(&pwd, cwd_path)?;
         }
 
@@ -478,7 +477,7 @@ fn bake_rustc(
     //     dockerfile.push_str(&format!("  --mount=type=bind,from={stage},source=/{RUSTUP_TOOLCHAIN},target=/{RUSTUP_TOOLCHAIN} \\\n"));
     // }
 
-    debug!(target:&krate, "all_externs = {all_externs:?}");
+    log::debug!(target:&krate, "all_externs = {all_externs:?}");
     assert!(externs.len() <= all_externs.len());
     let bakefiles = all_externs
         .into_iter()
@@ -487,7 +486,7 @@ fn bake_rustc(
                 bail!("BUG: corrupted bakefile.hcl for {xtern}")
             };
 
-            info!(target:&krate, "extern_bakefile: {extern_bakefile}");
+            log::info!(target:&krate, "extern_bakefile: {extern_bakefile}");
 
             dockerfile.push_str(&format!("  --mount=type=bind,from={extern_bakefile_stage},source=/{xtern},target={target_path}/deps/{xtern} \\\n"));
 
@@ -556,7 +555,7 @@ fn bake_rustc(
     let dockerfile = dockerfile; // Drop mut
     {
         let dockerfile_path = Utf8Path::new(&target_path).join(format!("{metadata}.Dockerfile"));
-        info!(target:&krate, "opening (RW) crate dockerfile {dockerfile_path}");
+        log::info!(target:&krate, "opening (RW) crate dockerfile {dockerfile_path}");
         fs::write(&dockerfile_path, &dockerfile)
             .with_context(|| format!("Failed creating dockerfile {dockerfile_path}"))?;
     }
@@ -580,7 +579,7 @@ fn bake_rustc(
     let mut extern_dockerfiles: BTreeMap<_, _> = bakefiles
         .into_iter()
         .map(|extern_bakefile| -> Result<_> {
-            info!(target:&krate, "opening (RO) extern bakefile {extern_bakefile}");
+            log::info!(target:&krate, "opening (RO) extern bakefile {extern_bakefile}");
             let mounts = used_contexts(&extern_bakefile)?;
             let mounts_len = mounts.len();
             contexts.extend(mounts.into_iter());
@@ -606,7 +605,7 @@ fn bake_rustc(
         for extern_dockerfile_path in matching {
             let res = extern_dockerfiles.remove(&extern_dockerfile_path);
             assert!(res.is_some());
-            info!(target:&krate, "opening (RO) extern dockerfile {extern_dockerfile_path}");
+            log::info!(target:&krate, "opening (RO) extern dockerfile {extern_dockerfile_path}");
             let extern_dockerfile = read_to_string(&extern_dockerfile_path)
                 .with_context(|| format!("Failed reading dockerfile {extern_dockerfile_path}"))?;
             dockerfile_bis.push_str(&extern_dockerfile);
@@ -671,7 +670,7 @@ target "{incremental_stage}" {{
 
     let bakefile_path = {
         let bakefile_path = format!("{target_path}/{crate_name}-{metadata}.hcl");
-        info!(target:&krate, "opening (RW) crate bakefile {bakefile_path}");
+        log::info!(target:&krate, "opening (RW) crate bakefile {bakefile_path}");
         if debug.is_some() {
             match read_to_string(&bakefile_path) {
                 Ok(existing) => pretty_assertions::assert_eq!(existing, bakefile),
@@ -686,8 +685,8 @@ target "{incremental_stage}" {{
 
     let mut cmd = Command::new("docker");
     if let Some(log_file) = debug {
-        info!(target:&krate, "bakefile: {bakefile_path}");
-        debug!(target:&krate, "{bakefile_path} = {data}", data = match read_to_string(&bakefile_path) {
+        log::info!(target:&krate, "bakefile: {bakefile_path}");
+        log::debug!(target:&krate, "{bakefile_path} = {data}", data = match read_to_string(&bakefile_path) {
             Ok(data) => data,
             Err(e) => e.to_string(),
         });
@@ -707,13 +706,13 @@ target "{incremental_stage}" {{
         .with_context(|| format!("Failed calling `docker {args:?}`", args = cmd.get_args()))?
         .status
         .code();
-    info!("command `docker buildx bake` ran in {}s: {code:?}", start.elapsed().as_secs());
+    log::info!("command `docker buildx bake` ran in {}s: {code:?}", start.elapsed().as_secs());
 
     // TODO: buffered reading + copy to STDERR/STDOUT => give open fds in bakefile?
     {
         use tar::Archive;
         let path = stdio_path.join(&io);
-        info!(target:&krate, "reading (RO) {path}");
+        log::info!(target:&krate, "reading (RO) {path}");
         let file = File::open(&path).with_context(|| format!("Failed to read {path}"))?;
         let mut archive = Archive::new(file);
         for entry in
@@ -723,7 +722,7 @@ target "{incremental_stage}" {{
             let mut data = String::new();
             let Ok(_) = entry.read_to_string(&mut data) else { continue };
             let msg = data.trim();
-            debug!(target:&krate, "{path} ~= {msg:?}");
+            log::debug!(target:&krate, "{path} ~= {msg:?}");
             if !msg.is_empty() {
                 let epath = entry.path_bytes();
                 if epath == IOOUT.as_bytes() {
@@ -738,7 +737,7 @@ target "{incremental_stage}" {{
                     loop {
                         match (a, b, c) {
                             (Some("artifact"), Some(":"), Some(file)) => {
-                                info!(target:&krate, "rustc wrote {file}")
+                                log::info!(target:&krate, "rustc wrote {file}")
                             }
                             (_, _, Some(_)) => {}
                             (_, _, None) => break,
@@ -757,10 +756,10 @@ target "{incremental_stage}" {{
             drop(cwd); // Removes tempdir contents
         }
         if code != Some(0) {
-            warn!(target:&krate, "Falling back...");
+            log::warn!(target:&krate, "Falling back...");
             let res = fallback(); // Bubble up actual error & outputs
             if res.is_ok() {
-                error!(target:&krate, "BUG found!");
+                log::error!(target:&krate, "BUG found!");
                 eprintln!("Found a bug in this script!");
             }
             return res;
