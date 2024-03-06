@@ -282,10 +282,13 @@ fn bake_rustc(
     let all_externs = all_externs;
     log::info!(target:&krate, "crate_externs: {crate_externs}");
     if debug.is_some() {
-        log::debug!(target:&krate, "{crate_externs} = {data}", data = match read_to_string(&crate_externs) {
+        match read_to_string(&crate_externs) {
             Ok(data) => data,
             Err(e) => e.to_string(),
-        });
+        }
+        .lines()
+        .filter(|x| !x.is_empty())
+        .for_each(|line| log::debug!(target:&krate, "❯ {line}"));
     }
 
     create_dir_all(&out_dir).with_context(|| format!("Failed to `mkdir -p {out_dir}`"))?;
@@ -589,7 +592,9 @@ fn bake_rustc(
         })
         .collect::<Result<_>>()?;
     let mut dockerfile_bis = String::new();
-    // Concat dockerfiles from topological sort of the DAG (stages must be defined first, then used)
+    // Concat dockerfiles from
+    // topological sort
+    // of the DAG (stages must be defined first, then used)
     // Assumes that the more deps a crate has, the later it appears in the deps tree
     // TODO: do     vvvvvvvvv better than this
     for i_mounts in 0..999999usize {
@@ -686,10 +691,17 @@ target "{incremental_stage}" {{
     let mut cmd = Command::new("docker");
     if let Some(log_file) = debug {
         log::info!(target:&krate, "bakefile: {bakefile_path}");
-        log::debug!(target:&krate, "{bakefile_path} = {data}", data = match read_to_string(&bakefile_path) {
+        match read_to_string(&bakefile_path) {
             Ok(data) => data,
             Err(e) => e.to_string(),
-        });
+        }
+        .lines()
+        .filter(|x| !x.is_empty())
+        .for_each(|line| log::debug!(target:&krate, "❯ {line}"));
+
+        //FIXME: find how to prepend `krate` to each line written to file
+        //wrap a file writer
+        //newtype (nutype? all methods except the) call to write(..)
         cmd.arg("--debug").stdin(Stdio::null()).stdout(log_file()?).stderr(log_file()?);
     } else {
         cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
