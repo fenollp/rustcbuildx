@@ -621,7 +621,8 @@ fn bake_rustc(
     dockerfile_bis.push_str(&dockerfile);
     drop(dockerfile); // Earlier: wrote to disk
 
-    let stdio = env::temp_dir().join(format!("{PKG}-{stdio_stage}"));
+    // let stdio = env::temp_dir().join(format!("{PKG}-{stdio_stage}"));
+    let stdio = Temp::new_dir().context("Failed to create tmpdir 'stdio'")?;
     let Some(stdio_path) = Utf8Path::from_path(stdio.as_path()) else {
         bail!("Path's UTF-8 encoding is corrupted: {stdio:?}")
     };
@@ -678,7 +679,13 @@ target "{incremental_stage}" {{
         log::info!(target:&krate, "opening (RW) crate bakefile {bakefile_path}");
         if debug.is_some() {
             match read_to_string(&bakefile_path) {
-                Ok(existing) => pretty_assertions::assert_eq!(existing, bakefile),
+                Ok(existing) => {
+                    let re = regex::Regex::new(r#"output = \["[^"]+"\]"#).unwrap();
+                    pretty_assertions::assert_eq!(
+                        re.replace(&existing, ""),
+                        re.replace(&bakefile, "")
+                    )
+                }
                 Err(e) if e.kind() == ErrorKind::NotFound => {}
                 Err(e) => bail!("{e}"),
             }
@@ -702,6 +709,7 @@ target "{incremental_stage}" {{
         //FIXME: find how to prepend `krate` to each line written to file
         //wrap a file writer
         //newtype (nutype? all methods except the) call to write(..)
+        //or env var -> folder -> new file per hcl
         cmd.arg("--debug").stdin(Stdio::null()).stdout(log_file()?).stderr(log_file()?);
     } else {
         cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
