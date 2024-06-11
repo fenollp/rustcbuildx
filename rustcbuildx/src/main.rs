@@ -233,6 +233,8 @@ async fn do_wrap_rustc(
     let ext = match crate_type.as_str() {
         "lib" => "rmeta".to_owned(),
         "bin" | "rlib" | "test" | "proc-macro" => "rlib".to_owned(),
+        // https://doc.rust-lang.org/reference/linkage.html
+        "cdylib" => "so".to_owned(), // *.so files on Linux, *.dylib files on macOS, and *.dll files on Windows
         _ => bail!("BUG: unexpected crate-type: '{crate_type}'"),
     };
     // https://rustc-dev-guide.rust-lang.org/backend/libs-and-metadata.html#rmeta

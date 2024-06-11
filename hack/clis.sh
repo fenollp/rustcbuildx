@@ -13,6 +13,7 @@ declare -a nvs nvs_args
 ((i+=1)); nvs[i]=diesel_cli@2.1.1;      oks[i]=ko; nvs_args[i]='--no-default-features --features=postgres' # /usr/bin/ld: cannot find -lpq: No such file or directory
 ((i+=1)); nvs[i]=hickory-dns@0.24.0;    oks[i]=ok; nvs_args[i]='--features=dns-over-rustls'
 ((i+=1)); nvs[i]=vixargs@0.1.0;         oks[i]=ok; nvs_args[i]=''
+((i+=1)); nvs[i]=gifski@1.32.0;         oks[i]=ok; nvs_args[i]=''
 
 # CARGO_TARGET_DIR=/tmp/cargoconfig0126 \cargo green install -vv --jobs=1 --locked --force cargo-config2@0.1.26 --example get --root=/tmp
 
