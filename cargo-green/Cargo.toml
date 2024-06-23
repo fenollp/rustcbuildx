@@ -12,3 +12,5 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 which.workspace = true
+
+gix.workspace = true

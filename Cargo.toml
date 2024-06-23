@@ -31,6 +31,7 @@ assertx = { version = "1", features = ["logging"] }
 camino = "1"
 env_logger = "0.10"
 futures = "0.3"
+gix = "0,>=0.63"
 home = "0,>=0.5"
 log = "0,>=0.4"
 mktemp = "0,>=0.5"

@@ -29,6 +29,12 @@ use anyhow::{anyhow, bail, Result};
 // \cargo green # check displays help
 
 fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
+    let pwd = "/home/pete/.cargo/git/checkouts/cross-dac8861107f29545/88f49ff";
+    let repo = gix::open(pwd).map_err(|e| anyhow!("Failed reading Git repo at {pwd}: {e}"))?;
+    for entry in repo.entries() {
+        eprintln!(">>> {entry:?}")
+    }
+
     let mut args = env::args().skip(1); // skips $0
 
     // skips "green"
