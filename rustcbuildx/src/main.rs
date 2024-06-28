@@ -10,36 +10,27 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use env_logger::{Env, Target};
-use tokio::process::Command;
-
-use crate::{
+use supergreen::{
+    base::RUST,
     cli::{envs, exit_code, help, pull, push},
     cratesio::{from_cratesio_input_path, into_stage},
-    envs::{base_image, internal, maybe_log, pass_env, runner, syntax, this},
+    envs::{self, base_image, internal, maybe_log, pass_env, runner, syntax, this},
     extensions::ShowCmd,
     md::{BuildContext, Md},
-    parse::RustcArgs,
     runner::{build, MARK_STDERR, MARK_STDOUT},
     stage::Stage,
 };
+use tokio::process::Command;
 
-mod base;
-mod cli;
-mod cratesio;
-mod envs;
-mod extensions;
-mod md;
+use crate::parse::RustcArgs;
+
 mod parse;
-mod runner;
-mod stage;
 
 const PKG: &str = env!("CARGO_PKG_NAME");
 const REPO: &str = env!("CARGO_PKG_REPOSITORY");
 const VSN: &str = env!("CARGO_PKG_VERSION");
 
 const BUILDRS_CRATE_NAME: &str = "build_script_build";
-
-const RUST: &str = "rust-base";
 
 // NOTE: this RUSTC_WRAPPER program only ever gets called by `cargo`, so we save
 //       ourselves some trouble and assume std::path::{Path, PathBuf} are UTF-8.

@@ -1,17 +1,19 @@
-use crate::{runner::maybe_lock_image, RUST};
+use crate::runner::maybe_lock_image;
+
+pub const RUST: &str = "rust-base";
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RustcV {
-    pub(crate) version: String,
-    pub(crate) commit: String,
-    pub(crate) date: String,
-    pub(crate) channel: String,
+pub struct RustcV {
+    pub version: String,
+    pub commit: String,
+    pub date: String,
+    pub channel: String,
 
-    pub(crate) base: String,
+    pub base: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum BaseImage {
+pub enum BaseImage {
     Image(String),
     RustcV(RustcV),
 }
@@ -40,7 +42,7 @@ fn test_from_rustc_v() {
 impl BaseImage {
     #[inline]
     #[must_use]
-    pub(crate) fn base(&self) -> String {
+    pub fn base(&self) -> String {
         match self {
             Self::Image(img) => img.clone(),
             Self::RustcV(RustcV { base, .. }) if base.is_empty() => {
@@ -52,7 +54,7 @@ impl BaseImage {
 
     #[inline]
     #[must_use]
-    pub(crate) fn from_rustc_v(rustc_v: String) -> Option<Self> {
+    pub fn from_rustc_v(rustc_v: String) -> Option<Self> {
         let x = rustc_v.trim_start_matches("rustc ").replace(['(', ')', '\n'], "");
 
         let cut: Vec<&str> = x.splitn(3, ' ').collect();
@@ -76,7 +78,7 @@ impl BaseImage {
         Some(BaseImage::Image(format!("docker-image://docker.io/library/rust:{version}-slim")))
     }
 
-    pub(crate) async fn maybe_lock_base(self) -> Self {
+    pub async fn maybe_lock_base(self) -> Self {
         let base = maybe_lock_image(self.base()).await;
         match self {
             Self::Image(_) => Self::Image(base),
@@ -84,7 +86,7 @@ impl BaseImage {
         }
     }
 
-    pub(crate) fn block(&self) -> String {
+    pub fn block(&self) -> String {
         let base = self.base();
         let base = base.trim_start_matches("docker-image://");
 

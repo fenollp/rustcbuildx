@@ -14,6 +14,8 @@ declare -a nvs nvs_args
 ((i+=1)); nvs[i]=hickory-dns@0.24.0;    oks[i]=ok; nvs_args[i]='--features=dns-over-rustls'
 ((i+=1)); nvs[i]=vixargs@0.1.0;         oks[i]=ok; nvs_args[i]=''
 
+# https://crates.io/crates/ntpd
+
 # CARGO_TARGET_DIR=/tmp/cargoconfig0126 \cargo green install -vv --jobs=1 --locked --force cargo-config2@0.1.26 --example get --root=/tmp
 
 #        Fresh bitflags v2.5.0
@@ -311,8 +313,7 @@ fi
 name_at_version=$1; shift
 modifier=${1:-0}
 
-distclean=0; if [[ "$modifier" = 'distclean' ]]; then distclean=1; fi
-clean=0;     if [[ "$modifier" = 'clean'     ]]; then clean=1; fi
+clean=0; if [[ "$modifier" = 'clean' ]]; then clean=1; fi
 
 # Special first arg handling..
 case "$name_at_version" in
@@ -330,11 +331,7 @@ set -x
     tmplogs=/tmp/clis-$name_at_version.logs.txt
     if [[ "$clean" = '1' ]]; then
       rm -rf "$tmptrgt"
-      docker buildx prune       --force
-    fi
-    if [[ "$distclean" = '1' ]]; then
-      rm -rf "$tmptrgt"
-      docker buildx prune --all --force --verbose
+      docker buildx rm --force supergreen
     fi
     CARGO_TARGET_DIR=/tmp/rstcbldx cargo install --locked --frozen --offline --force --root=/tmp/rstcbldx --path="$PWD"/rustcbuildx
     CARGO_TARGET_DIR=/tmp/crggreen cargo install --locked --frozen --offline --force --root=/tmp/crggreen --path="$PWD"/cargo-green
@@ -354,8 +351,7 @@ set -x
     CARGO_TARGET_DIR="$tmptrgt" \
       \cargo green -v build --jobs=${jobs:-1} --all-targets --all-features --locked --frozen --offline
       # FIXME: this doesn't depend on $name_at_version
-    if [[ "$clean"     = 1 ]]; then docker buildx prune       --force; fi
-    if [[ "$distclean" = 1 ]]; then docker buildx prune --all --force --verbose | tee --append "$tmplogs" || exit 1; fi
+    if [[ "$clean" = 1 ]]; then docker buildx du --builder=supergreen --verbose | tee --append "$tmplogs" || exit 1; docker buildx rm --force supergreen; fi
     case "$(wc "$tmplogs")" in '0 0 0 '*) ;;
                                        *) $PAGER "$tmplogs" ;; esac
     exit ;;
@@ -386,11 +382,7 @@ tmpbins=/tmp
 
 if [[ "$clean" = '1' ]]; then
   rm -rf "$tmptrgt"
-  docker buildx prune       --force
-fi
-if [[ "$distclean" = '1' ]]; then
-  rm -rf "$tmptrgt"
-  docker buildx prune --all --force --verbose
+  docker buildx rm --force supergreen
 fi
 
 rm -f "$tmpgooo".*
@@ -427,8 +419,7 @@ send \
   RUSTCBUILDX_CACHE_IMAGE="${RUSTCBUILDX_CACHE_IMAGE:-}" \
   PATH=/tmp/crggreen/bin:"$PATH" \
     CARGO_TARGET_DIR="$tmptrgt" \cargo green -vv install --jobs=${jobs:-1} --root=$tmpbins --locked --force "$(as_install "$name_at_version")" "$args" \
-  '&&' 'if' '[[' "$clean"     '=' '1' ']];' 'then' docker buildx prune       --force           '|' tee --append "$tmplogs" '||' 'exit' '1;' 'fi' \
-  '&&' 'if' '[[' "$distclean" '=' '1' ']];' 'then' docker buildx prune --all --force --verbose '|' tee --append "$tmplogs" '||' 'exit' '1;' 'fi' \
+  '&&' 'if' '[[' "$clean" '=' '1' ']];' 'then' docker buildx du --builder=supergreen --verbose '|' tee --append "$tmplogs" '||' 'exit' '1;' docker buildx rm --force supergreen ';' 'fi' \
   '&&' tmux kill-session -t "$session_name"
 tmux select-layout even-vertical
 

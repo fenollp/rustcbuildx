@@ -1,4 +1,4 @@
-pub(crate) trait Popped: Clone {
+pub trait Popped: Clone {
     #[must_use]
     fn pop(&mut self) -> bool;
     fn popped(&mut self, times: usize) -> Self
@@ -19,7 +19,7 @@ impl Popped for camino::Utf8PathBuf {
     }
 }
 
-pub(crate) trait ShowCmd {
+pub trait ShowCmd {
     #[must_use]
     fn show(&self) -> String;
 }

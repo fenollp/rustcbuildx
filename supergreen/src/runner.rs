@@ -24,11 +24,11 @@ use crate::{
     stage::Stage,
 };
 
-pub(crate) const MARK_STDOUT: &str = "::STDOUT:: ";
-pub(crate) const MARK_STDERR: &str = "::STDERR:: ";
+pub const MARK_STDOUT: &str = "::STDOUT:: ";
+pub const MARK_STDERR: &str = "::STDERR:: ";
 
 #[must_use]
-pub(crate) async fn maybe_lock_image(mut img: String) -> String {
+pub async fn maybe_lock_image(mut img: String) -> String {
     // Lock image, as podman(4.3.1) does not respect --pull=false (fully, anyway)
     if img.starts_with("docker-image://") && !img.contains("@sha256:") {
         if let Some(line) = Command::new(runner())
@@ -44,11 +44,12 @@ pub(crate) async fn maybe_lock_image(mut img: String) -> String {
         {
             img.push_str(line.trim_start_matches(|c| c != '@'));
         }
+        // FIXME: else HTTP read registry for platform
     }
     img
 }
 
-pub(crate) async fn build(
+pub async fn build(
     krate: &str,
     command: &str,
     dockerfile_path: &Utf8Path,
@@ -70,17 +71,7 @@ pub(crate) async fn build(
 
     //TODO: (use if set) cmd.env("SOURCE_DATE_EPOCH", "0"); // https://reproducible-builds.org/docs/source-date-epoch
 
-    // docker buildx create \
-    //   --name remote-container \
-    //   --driver remote \
-    //   --driver-opt cacert=${PWD}/.certs/client/ca.pem,cert=${PWD}/.certs/client/cert.pem,key=${PWD}/.certs/client/key.pem,servername=<TLS_SERVER_NAME> \
-    //   tcp://localhost:1234
-
-    // docker buildx create \
-    //   --name container \
-    //   --driver=docker-container \
-    //   --driver-opt=[key=value,...]
-    // container
+    cmd.arg("--builder=supergreen");
 
     if false {
         cmd.arg("--no-cache");
@@ -93,7 +84,7 @@ pub(crate) async fn build(
 
     if let Some(img) = cache_image() {
         let img = img.trim_start_matches("docker-image://");
-        cmd.arg(format!("--cache-from=type=registry,ref={img}"));
+        cmd.arg(format!("--cache-from=type=registry,ref={img},mode=max"));
 
         let tag = Stage::new(krate.to_owned())?; // TODO: include enough info for repro
         if tag.to_string().starts_with("bin-") {

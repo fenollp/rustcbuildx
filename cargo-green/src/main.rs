@@ -4,10 +4,15 @@
 use std::{
     env,
     path::PathBuf,
-    process::{Command, ExitCode},
+    process::{ExitCode, Stdio},
 };
 
 use anyhow::{anyhow, bail, Result};
+use supergreen::{
+    envs::{builder_image, runner},
+    extensions::ShowCmd,
+};
+use tokio::process::Command;
 
 /*
 
@@ -28,7 +33,8 @@ use anyhow::{anyhow, bail, Result};
 // \cargo green --version # check != displayed vsn
 // \cargo green # check displays help
 
-fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
     let mut args = env::args().skip(1); // skips $0
 
     // skips "green"
@@ -56,43 +62,44 @@ fn main() -> Result<ExitCode, Box<dyn std::error::Error>> {
         }
     }
     cmd.args(args);
+    cmd.kill_on_drop(true);
 
-    if let Err(e) = (|| -> Result<()> {
-        let bin = ensure_binary_exists("rustcbuildx")?;
-
-        // TODO pull-images
-        // TODO read package.metadata.green
-        // TODO: TUI above cargo output
-
-        cmd.env("RUSTCBUILDX_LOG", env::var("RUSTCBUILDX_LOG").unwrap_or("debug".to_owned()));
-        cmd.env(
-            "RUSTCBUILDX_LOG_PATH",
-            env::var("RUSTCBUILDX_LOG_PATH").unwrap_or("/tmp/cargo-green.log".to_owned()),
-        );
-        if let Ok(ctx) = env::var("RUSTCBUILDX_CACHE_IMAGE") {
-            cmd.env("RUSTCBUILDX_CACHE_IMAGE", ctx);
-        }
-        if let Ok(wrapper) = env::var("RUSTC_WRAPPER") {
-            bail!(
-                r#"
-    You called `cargo-green` but a $RUSTC_WRAPPER is already set (to {wrapper})
-        We don't know what to do...
-"#
-            )
-        }
-        cmd.env("RUSTC_WRAPPER", bin);
-
-        Ok(())
-    })() {
+    if let Err(e) = build(&mut cmd).await {
         eprintln!("{e}");
         return Ok(ExitCode::FAILURE);
     }
 
-    // eprintln!(">>> {:?}", cmd.get_program()); // FIXME: drop
-    // eprintln!(">>> {:?}", cmd.get_args()); // FIXME: drop
-    // eprintln!(">>> {:?}", cmd.get_envs()); // FIXME: drop
-    let status = cmd.status()?;
+    let status = cmd.status().await?;
     Ok(status.code().map_or(ExitCode::FAILURE, |code| ExitCode::from(code as u8)))
+}
+
+async fn build(cmd: &mut Command) -> Result<()> {
+    let bin = ensure_binary_exists("rustcbuildx")?;
+
+    setup_build_driver().await?;
+
+    // TODO read package.metadata.green
+    // TODO: TUI above cargo output
+
+    cmd.env("RUSTCBUILDX_LOG", env::var("RUSTCBUILDX_LOG").unwrap_or("debug".to_owned()));
+    cmd.env(
+        "RUSTCBUILDX_LOG_PATH",
+        env::var("RUSTCBUILDX_LOG_PATH").unwrap_or("/tmp/cargo-green.log".to_owned()),
+    );
+    if let Ok(ctx) = env::var("RUSTCBUILDX_CACHE_IMAGE") {
+        cmd.env("RUSTCBUILDX_CACHE_IMAGE", ctx);
+    }
+    if let Ok(wrapper) = env::var("RUSTC_WRAPPER") {
+        bail!(
+            r#"
+    You called `cargo-green` but a $RUSTC_WRAPPER is already set (to {wrapper})
+        We don't know what to do...
+"#
+        )
+    }
+    cmd.env("RUSTC_WRAPPER", bin);
+
+    Ok(())
 }
 
 fn ensure_binary_exists(name: &'static str) -> Result<PathBuf> {
@@ -105,4 +112,54 @@ fn ensure_binary_exists(name: &'static str) -> Result<PathBuf> {
 "#
         )
     })
+}
+
+// https://docs.docker.com/build/drivers/docker-container/
+// https://docs.docker.com/build/drivers/remote/
+// https://docs.docker.com/build/drivers/kubernetes/
+async fn setup_build_driver() -> Result<()> {
+    let name = "supergreen";
+
+    try_removing_previous_builder(name).await;
+
+    let mut cmd = Command::new(runner());
+    cmd.arg("--debug");
+    cmd.args(["buildx", "create"]);
+    cmd.arg(format!("--name={name}"));
+    cmd.arg("--bootstrap");
+    cmd.arg("--driver=docker-container");
+    let img = builder_image().await.trim_start_matches("docker-image://");
+    cmd.arg(&format!("--driver-opt=image={img}"));
+
+    cmd.kill_on_drop(true);
+    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+
+    let call = cmd.show();
+    let envs: Vec<_> = cmd.as_std().get_envs().map(|(k, v)| format!("{k:?}={v:?}")).collect();
+    let envs = envs.join(" ");
+
+    eprintln!("Calling {call} (env: {envs:?})`");
+
+    if !cmd.status().await?.success() {
+        bail!("BUG: failed to create builder")
+    }
+
+    Ok(())
+}
+
+async fn try_removing_previous_builder(name: &str) {
+    let mut cmd = Command::new(runner());
+    cmd.arg("--debug");
+    cmd.args(["buildx", "rm", name, "--keep-state", "--force"]);
+
+    cmd.kill_on_drop(true);
+    cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+
+    let call = cmd.show();
+    let envs: Vec<_> = cmd.as_std().get_envs().map(|(k, v)| format!("{k:?}={v:?}")).collect();
+    let envs = envs.join(" ");
+
+    eprintln!("Calling {call} (env: {envs:?})`");
+
+    let _ = cmd.status().await;
 }

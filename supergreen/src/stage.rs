@@ -1,7 +1,7 @@
 use nutype::nutype;
 
 #[nutype(sanitize(with=oci_name), validate(predicate=tag_name), derive(Debug, Display, PartialEq))]
-pub(crate) struct Stage(String);
+pub struct Stage(String);
 
 #[inline]
 #[must_use]

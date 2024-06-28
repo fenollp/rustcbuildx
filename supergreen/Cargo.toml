@@ -1,0 +1,30 @@
+[package]
+name = "supergreen"
+description = "Lib of common utils for cargo-green & rustcbuildx"
+publish = false
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+camino.workspace = true
+futures.workspace = true
+log.workspace = true
+nutype.workspace = true
+serde-jsonlines.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha256.workspace = true
+szyk.workspace = true
+tokio.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+assertx.workspace = true
+mktemp.workspace = true
+pretty_assertions.workspace = true

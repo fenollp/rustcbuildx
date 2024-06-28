@@ -8,11 +8,12 @@ use tokio::process::Command;
 
 use crate::{base::BaseImage, runner::maybe_lock_image};
 
-pub(crate) mod internal {
+pub mod internal {
     use std::env;
 
     pub const RUSTCBUILDX: &str = "RUSTCBUILDX";
     pub const RUSTCBUILDX_BASE_IMAGE: &str = "RUSTCBUILDX_BASE_IMAGE";
+    pub const RUSTCBUILDX_BUILDER_IMAGE: &str = "RUSTCBUILDX_BUILDER_IMAGE";
     pub const RUSTCBUILDX_CACHE_IMAGE: &str = "RUSTCBUILDX_CACHE_IMAGE";
     pub const RUSTCBUILDX_INCREMENTAL: &str = "RUSTCBUILDX_INCREMENTAL";
     pub const RUSTCBUILDX_LOG: &str = "RUSTCBUILDX_LOG";
@@ -26,6 +27,9 @@ pub(crate) mod internal {
     }
     pub fn base_image() -> Option<String> {
         env::var(RUSTCBUILDX_BASE_IMAGE).ok()
+    }
+    pub fn builder_image() -> Option<String> {
+        env::var(RUSTCBUILDX_BUILDER_IMAGE).ok()
     }
     pub fn cache_image() -> Option<String> {
         env::var(RUSTCBUILDX_CACHE_IMAGE).ok().and_then(|x| (!x.is_empty()).then_some(x))
@@ -70,24 +74,24 @@ pub(crate) mod internal {
 // EOF
 
 #[must_use]
-pub(crate) fn this() -> bool {
+pub fn this() -> bool {
     internal::this().map(|x| x == "1").unwrap_or_default()
 }
 
 #[must_use]
-pub(crate) fn incremental() -> bool {
+pub fn incremental() -> bool {
     static ONCE: OnceLock<bool> = OnceLock::new();
     *ONCE.get_or_init(|| internal::incremental().map(|x| x == "1").unwrap_or_default())
 }
 
 #[must_use]
-pub(crate) fn log_path() -> &'static str {
+pub fn log_path() -> &'static str {
     static ONCE: OnceLock<String> = OnceLock::new();
     ONCE.get_or_init(|| internal::log_path().unwrap_or("/tmp/rstcbldx_FIXME".to_owned()))
 }
 
 #[must_use]
-pub(crate) fn runner() -> &'static str {
+pub fn runner() -> &'static str {
     static ONCE: OnceLock<String> = OnceLock::new();
     ONCE.get_or_init(|| {
         let val = internal::runner().unwrap_or("docker".to_owned());
@@ -104,7 +108,7 @@ pub(crate) fn runner() -> &'static str {
 
 // A Docker image or any build context, actually.
 #[must_use]
-pub(crate) async fn base_image() -> BaseImage {
+pub async fn base_image() -> BaseImage {
     static ONCE: OnceLock<BaseImage> = OnceLock::new();
     match ONCE.get() {
         Some(ctx) => ctx.clone(),
@@ -135,7 +139,7 @@ pub(crate) async fn base_image() -> BaseImage {
 
 // A Docker image path with registry information.
 #[must_use]
-pub(crate) fn cache_image() -> &'static Option<String> {
+pub fn cache_image() -> &'static Option<String> {
     static ONCE: OnceLock<Option<String>> = OnceLock::new();
     ONCE.get_or_init(|| {
         let val = internal::cache_image();
@@ -146,7 +150,7 @@ pub(crate) fn cache_image() -> &'static Option<String> {
                 panic!("{var} must start with 'docker-image://'")
             }
             if !val.trim_start_matches("docker-image://").contains('/') {
-                panic!("{var} must start with 'docker-image://'")
+                panic!("{var} host must contain a registry'")
             }
         }
 
@@ -155,7 +159,7 @@ pub(crate) fn cache_image() -> &'static Option<String> {
 }
 
 #[must_use]
-pub(crate) async fn syntax() -> &'static str {
+pub async fn syntax() -> &'static str {
     static ONCE: OnceLock<String> = OnceLock::new();
     match ONCE.get() {
         Some(img) => img,
@@ -169,10 +173,23 @@ pub(crate) async fn syntax() -> &'static str {
     }
 }
 
-// TODO: rename proj to https://crates.io/search?q=cargo-surimi
+#[must_use]
+pub async fn builder_image() -> &'static str {
+    static ONCE: OnceLock<String> = OnceLock::new();
+    match ONCE.get() {
+        Some(img) => img,
+        None => {
+            let img = "docker-image://docker.io/moby/buildkit:buildx-stable-1".to_owned();
+            let img = internal::builder_image().unwrap_or(img);
+            let img = maybe_lock_image(img).await;
+            let _ = ONCE.set(img);
+            ONCE.get().expect("just set builder_image")
+        }
+    }
+}
 
 #[must_use]
-pub(crate) fn maybe_log() -> Option<fn() -> Result<File>> {
+pub fn maybe_log() -> Option<fn() -> Result<File>> {
     fn log_file() -> Result<File> {
         let log_path = log_path();
         let errf = |e| anyhow!("Failed opening (WA) log file {log_path}: {e}");
@@ -185,7 +202,7 @@ pub(crate) fn maybe_log() -> Option<fn() -> Result<File>> {
 // https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
 #[inline]
 #[must_use]
-pub(crate) fn pass_env(var: &str) -> (bool, bool, bool) {
+pub fn pass_env(var: &str) -> (bool, bool, bool) {
     // Thanks https://github.com/cross-rs/cross/blob/44011c8854cb2eaac83b173cc323220ccdff18ea/src/docker/shared.rs#L969
     let passthrough = [
         "http_proxy",

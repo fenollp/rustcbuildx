@@ -1,14 +1,16 @@
 [package]
+name = "cargo-green"
+description = "Cargo plugin to sandbox, cache & remote exec cargo builds"
 authors.workspace = true
 categories.workspace = true
-description = "Cargo plugin to sandbox, cache & remote exec cargo builds"
 edition.workspace = true
 keywords.workspace = true
 license.workspace = true
-name = "cargo-green"
 repository.workspace = true
 version.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+supergreen.path = "../supergreen"
+tokio.workspace = true
 which.workspace = true
